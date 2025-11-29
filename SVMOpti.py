@@ -1,11 +1,12 @@
 import pickle
+import time
 import csv
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
 from sklearn.svm import LinearSVC
+from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
 
@@ -118,8 +119,14 @@ print(numb_15)
 print(numb_16)
 
 
+# train one 100 000 first suffled rows 
 
-#downsample to balance ? No problematic unbalance
+#Randomly choose 100 000 rows from data_df without replacement
+#Keep their original indices from the full dataset
+#Return a new DataFrame with 100k rows
+df_sub = data_df.sample(n=100_000, random_state=0)
+y_sub  = y[df_sub.index]
+x_sub  = df_sub.values
 
 #extract data into 80% train/ 20%test
 # x = eps_df.values only epsilon ? 
@@ -128,27 +135,70 @@ x_train, x_test, y_train, y_test = train_test_split(
     x, y,
     test_size=0.2,
     random_state=0,
-    stratify=y
+    stratify=y_sub
 )
+
 #scaling 
 scaler = StandardScaler()
 x_train = scaler.fit_transform(x_train)
 x_test  = scaler.transform(x_test)
 
+
 # SVM
-#svm_clf = LinearSVC(C=0.1, dual=False)  # solvinf primal prbl is good when n_samples > n_features
-svm_clf = SVC(
-    kernel="rbf", #gaussian kernel
-    C=1, #penalty for misclassification
-    gamma="scale",
-)
-svm_clf.fit(x_train, y_train)
+#svm_clf = SVC(
+    #kernel="rbf", #gaussian kernel
+    #C=10.0, #penalty for misclassification
+    #gamma="scale",
+#)
+#set of values to test during grid search
+C_values = [0.12, 0.11, 0.1, 1, 10, 11, 12]
+best_f1 = -np.inf
+best_C = None
+prevtime = 0
 
-# Test
-y_pred = svm_clf.predict(x_test)
-# Validation
-f1 = f1_score(y_test, y_pred, average = "macro") # equally weighted average of classes
-accuracy = accuracy_score(y_test, y_pred)
+for C in C_values:
+    #training
+    #
+    svm_clf1 = SVC(
+        kernel="rbf", #gaussian kernel
+        C=C, #penalty for misclassification
+        gamma="scale",
+    )
+    svm_clf1.fit(x_train, y_train)
 
-print("f1:", f1)
-print("accuracy:", accuracy)
+    #performance
+    y_pred = svm_clf1.predict(x_test)
+    f1 = f1_score(y_test, y_pred, average="macro") # equally weighted average of classes
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"C={C}, SVC model, macro F1={f1:.4f}")
+    print(f"C={C}, SVC model, accuracy={accuracy:.4f}")
+    time = time.time()
+    print(time - prevtime)
+    prevtime = time
+
+    if f1 > best_f1:
+        best_f1 = f1
+        best_C = C
+    
+    #second model
+    svm_clf2 = LinearSVC(C=C, dual=False)  # dual=False is good when n_samples > n_features
+    svm_clf2.fit(x_train, y_train)
+
+    #performance
+    y_pred2 = svm_clf1.predict(x_test)
+    f12 = f1_score(y_test, y_pred2, average="macro") # equally weighted average of classes
+    accuracy2 = accuracy_score(y_test, y_pred2)
+    print(f"C={C}, linear SVC model, macro F1={f12:.4f}")
+    print(f"C={C}, linear SVC model, accuracy={accuracy2:.4f}")
+    time = time.time()
+    print(time - prevtime)
+    prevtime = time
+
+    if f12 > best_f12:
+        best_f12 = f12
+        best_C2 = C
+
+
+
+print("best C for SVC model : best_C ={best_C}")
+print("best C for SVC linear model : best_C2={best_C2}")
