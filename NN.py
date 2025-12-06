@@ -3,11 +3,13 @@ import csv
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.svm import LinearSVC
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import StratifiedKFold
+import NNOpti as opti
 
 
 with open("dataset/dataset.pkl", "rb") as f:
@@ -119,71 +121,50 @@ print(numb_16)
 
 
 
-#downsample to balance 
-
-
-counts = {
-    0: 209953,
-    1: 87948,
-    2: 111527,
-    3: 51882,
-    4: 57206,
-    5: 29708,
-    6: 23705,
-    7: 20207,
-    8: 12997,
-    9: 87721,
-    10: 111797,
-    11: 51575,
-    12: 56978,
-    13: 29464,
-    14: 24010,
-    15: 20295,
-    16: 13027
-}
-
-N = data_df.shape[0]
-K = data_df[fi_cols].shape[1] + 1 #number of features without deformation epsilon
-
-class_weights = {c: N / (K * n) for c, n in counts.items()}
-
+#class weighting not handle by sklearn MLPClassifier !!
 
 #extract data into 80% train/ 20%test
 # x = eps_df.values only epsilon ? 
-
 x_train, x_test, y_train, y_test = train_test_split(
     x, y,
     test_size=0.2,
     random_state=0,
     stratify=y
 )
-#scaling 
+
+# Scaling
 scaler = StandardScaler()
 x_train = scaler.fit_transform(x_train)
 x_test  = scaler.transform(x_test)
 
-# define your model
-#
-#
-#
-sample_weight_train = np.array([class_weights[y_i] for y_i in y_train])
- 
-# call your model with sample_weight_train
-# model(x_train, y_train, sample_weight=sample_weight_train)
+
+# NN classifier (MLP)
+#number of neruons for each hidden layer : to tune
+hidden1=opti.hidden1
+hidden2=opti.hidden2
+alpha = opti.alpha # L2 regularization parameter to tune
+eta = opti.eta   # learning rate to tune 
+batch_size = opti.batch_size #number of training samples used per gradient update )
+
+mlp_clf = MLPClassifier(
+    hidden_layer_sizes=(hidden1, hidden2),  # 2 hidden layers, can tune
+    learning_rate_init=eta,
+    alpha=alpha,
+    activation="relu", #function applied inside each neuron
+    solver="adam",
+    batch_size=batch_size, #mini-batch stochastic gradient descent
+    max_iter=20,      # max number of full-passing over the entire training dataset
+    verbose=True,
+)
+# Train with sample weights
+mlp_clf.fit(x_train, y_train)
+
 
 # Test
-#y_pred =
+y_pred = mlp_clf.predict(x_test)
 
-# Validation
-# F1 par classe (même ordre que labels=0..16)
-labels = np.arange(17)  # classes 0 à 16
-f1_per_class = f1_score(y_test, y_pred, labels=labels, average=None)
+f1 = f1_score(y_test, y_pred, average="macro")
+accuracy = accuracy_score(y_test, y_pred)
 
-#print("\nF1 par classe :")
-for c, f1_c in zip(labels, f1_per_class):
-    print(f"Classe {c}: F1 = {f1_c:.4f}")
-#f1 = f1_score(y_test, y_pred, average = "macro") # equally weighted average of classes
-#accuracy = accuracy_score(y_test, y_pred)
-
-#print("f1:", f1)
-#print("accuracy:", accuracy)
+print("Macro F1:", f1)
+print("Accuracy:", accuracy)

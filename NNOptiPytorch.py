@@ -1,13 +1,14 @@
+import optuna
+from classes import NumpyDataset as npdata
 import pickle
 import csv
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
-from sklearn.svm import LinearSVC
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import StratifiedKFold
+
 
 
 with open("dataset/dataset.pkl", "rb") as f:
@@ -119,7 +120,7 @@ print(numb_16)
 
 
 
-#downsample to balance 
+#class weighting to balance 
 
 
 counts = {
@@ -150,40 +151,169 @@ class_weights = {c: N / (K * n) for c, n in counts.items()}
 
 #extract data into 80% train/ 20%test
 # x = eps_df.values only epsilon ? 
-
 x_train, x_test, y_train, y_test = train_test_split(
     x, y,
     test_size=0.2,
     random_state=0,
     stratify=y
 )
-#scaling 
+
+# Scaling
 scaler = StandardScaler()
 x_train = scaler.fit_transform(x_train)
 x_test  = scaler.transform(x_test)
 
-# define your model
-#
-#
-#
+# Build sample weights for TRAIN
 sample_weight_train = np.array([class_weights[y_i] for y_i in y_train])
- 
-# call your model with sample_weight_train
-# model(x_train, y_train, sample_weight=sample_weight_train)
 
-# Test
-#y_pred =
+# NNOpti.py
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from sklearn.metrics import f1_score
+import optuna
 
-# Validation
-# F1 par classe (même ordre que labels=0..16)
-labels = np.arange(17)  # classes 0 à 16
-f1_per_class = f1_score(y_test, y_pred, labels=labels, average=None)
+from classes import MLP, NumpyDataset
 
-#print("\nF1 par classe :")
-for c, f1_c in zip(labels, f1_per_class):
-    print(f"Classe {c}: F1 = {f1_c:.4f}")
-#f1 = f1_score(y_test, y_pred, average = "macro") # equally weighted average of classes
-#accuracy = accuracy_score(y_test, y_pred)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-#print("f1:", f1)
-#print("accuracy:", accuracy)
+
+# Training for 1 epoch
+def train_one_epoch(model, loader, optimizer, criterion):
+    model.train()
+    total_loss = 0.0
+
+    for Xb, yb in loader:
+        Xb = Xb.to(device)
+        yb = yb.to(device)
+
+        optimizer.zero_grad()
+        logits = model(Xb)
+        loss = criterion(logits, yb)
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item() * Xb.size(0)
+
+    return total_loss / len(loader.dataset)
+
+
+
+# Evaluation: macro F1
+
+def eval_f1_macro(model, loader):
+    model.eval()
+    all_preds = []
+    all_targets = []
+
+    with torch.no_grad():
+        for xb, yb in loader:
+            xb = xb.to(device)
+            logits = model(xb)
+            preds = logits.argmax(dim=1)
+
+            all_preds.append(preds.cpu().numpy())
+            all_targets.append(yb.numpy())
+
+    y_pred = np.concatenate(all_preds)
+    y_true = np.concatenate(all_targets)
+    return f1_score(y_true, y_pred, average="macro")
+
+
+
+# Optuna objective factory
+
+def make_objective(train_dataset, test_dataset, class_weights, input_dim, num_classes):
+
+    def objective(trial):
+        # Hyperparameters
+        hidden1 = trial.suggest_int("hidden1", 32, 256)
+        hidden2 = trial.suggest_int("hidden2", 32, 256)
+        lr      = trial.suggest_loguniform("learning_rate", 1e-4, 1e-2)
+        wd      = trial.suggest_loguniform("weight_decay", 1e-6, 1e-2)
+        batch_size = trial.suggest_categorical("batch_size", [128, 256, 512])
+        num_epochs = trial.suggest_int("epochs", 5, 15)
+
+        # Dataloaders
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_loader  = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+        # Model
+        model = MLP(input_dim, hidden1, hidden2, num_classes).to(device)
+        criterion = nn.CrossEntropyLoss(weight=class_weights)
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+
+        # Training loop
+        best_f1 = 0.0
+        for epoch in range(num_epochs):
+            train_one_epoch(model, train_loader, optimizer, criterion)
+            f1 = eval_f1_macro(model, test_loader)
+
+            trial.report(f1, epoch)
+            if trial.should_prune():
+                raise optuna.exceptions.TrialPruned()
+
+            best_f1 = max(best_f1, f1)
+
+        return best_f1
+
+    return objective
+
+
+# Run Optuna study
+
+def run_optuna(train_dataset, test_dataset, class_weights, input_dim, num_classes, n_trials=30):
+    objective = make_objective(train_dataset, test_dataset, class_weights, input_dim, num_classes)
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials)
+
+    print("Best:", study.best_params)
+    return study.best_params
+
+import NNOpti as opti
+
+
+
+
+
+# 4. Train-test split + scaling
+
+x_train, x_test, y_train, y_test = train_test_split(
+    x, y, test_size=0.2, random_state=0, stratify=y
+)
+
+scaler = StandardScaler()
+x_train = scaler.fit_transform(x_train)
+x_test  = scaler.transform(x_test)
+
+
+# 5. PyTorch Dataset using classes.py & DataLoader
+
+train_dataset = npdata(x_train, y_train)
+test_dataset  = npdata(x_test, y_test)
+
+batch_size = opti.batch_size
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_loader  = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+
+best = opti.run_optuna(
+    train_dataset,
+    test_dataset,
+    class_weights,
+    input_dim=x_train.shape[1],
+    num_classes=17,
+    n_trials=50
+)
+
+hidden1     = best["hidden1"]
+hidden2     = best["hidden2"]
+eta         = best["learning_rate"]
+weightdecay = best["weight_decay"]
+batch_size  = best["batch_size"]
+epochs      = best["epochs"]
+
+print("=== Best hyperparameters ===")
+print(best)

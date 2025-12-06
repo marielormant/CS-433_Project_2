@@ -1,13 +1,14 @@
+import optuna
+
 import pickle
 import csv
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
+from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
-from sklearn.svm import LinearSVC
 from sklearn.model_selection import train_test_split
-from sklearn.model_selection import StratifiedKFold
+
 
 
 with open("dataset/dataset.pkl", "rb") as f:
@@ -119,7 +120,7 @@ print(numb_16)
 
 
 
-#downsample to balance 
+#class weighting to balance 
 
 
 counts = {
@@ -150,40 +151,54 @@ class_weights = {c: N / (K * n) for c, n in counts.items()}
 
 #extract data into 80% train/ 20%test
 # x = eps_df.values only epsilon ? 
-
 x_train, x_test, y_train, y_test = train_test_split(
     x, y,
     test_size=0.2,
     random_state=0,
     stratify=y
 )
-#scaling 
+
+# Scaling
 scaler = StandardScaler()
 x_train = scaler.fit_transform(x_train)
 x_test  = scaler.transform(x_test)
 
-# define your model
-#
-#
-#
+# Build sample weights for TRAIN
 sample_weight_train = np.array([class_weights[y_i] for y_i in y_train])
- 
-# call your model with sample_weight_train
-# model(x_train, y_train, sample_weight=sample_weight_train)
 
-# Test
-#y_pred =
 
-# Validation
-# F1 par classe (même ordre que labels=0..16)
-labels = np.arange(17)  # classes 0 à 16
-f1_per_class = f1_score(y_test, y_pred, labels=labels, average=None)
+def objective(trial): #a trial is one experiment run by optuna
+    # hyperparameters to tune
+    #number of neurons in the first and second hidden layers
+    hidden1 = trial.suggest_int("hidden1", 32, 256)
+    hidden2 = trial.suggest_int("hidden2", 32, 256)
+    #leraning rate eta
+    eta = trial.suggest_loguniform("learning_rate", 1e-4, 1e-2)
+    #L2 regularization parameter to penalize large weight
+    alpha = trial.suggest_loguniform("alpha", 1e-6, 1e-2)
+    batch_size = trial.suggest_categorical("batch_size", [128, 256, 512])
 
-#print("\nF1 par classe :")
-for c, f1_c in zip(labels, f1_per_class):
-    print(f"Classe {c}: F1 = {f1_c:.4f}")
-#f1 = f1_score(y_test, y_pred, average = "macro") # equally weighted average of classes
-#accuracy = accuracy_score(y_test, y_pred)
+    model = MLPClassifier(
+        hidden_layer_sizes=(hidden1, hidden2),
+        learning_rate_init=eta,
+        alpha=alpha,
+        solver="adam",
+        batch_size=batch_size,
+        max_iter=20
+    )
 
-#print("f1:", f1)
-#print("accuracy:", accuracy)
+    model.fit(x_train, y_train, sample_weight=sample_weight_train)
+    y_pred = model.predict(x_test)
+
+    # Return macro-F1 score for optimization
+    return f1_score(y_test, y_pred, average="macro")
+
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=50)
+
+print(study.best_params)
+hidden1 = study.best_params["hidden1"]
+hidden2 = study.best_params["hidden2"]
+eta = study.best_params["learning_rate"]
+alpha = study.best_params["alpha"]
+batch_size = study.best_params["batch_size"]
