@@ -73,3 +73,4 @@ fail_summary = pd.DataFrame(
 
 print("Failure summary")
 print(fail_summary.sample(10, random_state=21))
+print(len())

@@ -119,7 +119,34 @@ print(numb_16)
 
 
 
-#downsample to balance ? No problematic unbalance
+#downsample to balance 
+
+
+counts = {
+    0: 209953,
+    1: 87948,
+    2: 111527,
+    3: 51882,
+    4: 57206,
+    5: 29708,
+    6: 23705,
+    7: 20207,
+    8: 12997,
+    9: 87721,
+    10: 111797,
+    11: 51575,
+    12: 56978,
+    13: 29464,
+    14: 24010,
+    15: 20295,
+    16: 13027
+}
+
+N = data_df.shape[0]
+K = data_df[fi_cols].shape[1] #number of features without deformation epsilon
+
+class_weights = {c: N / (K * n) for c, n in counts.items()}
+
 
 #extract data into 80% train/ 20%test
 # x = eps_df.values only epsilon ? 
@@ -139,10 +166,12 @@ x_test  = scaler.transform(x_test)
 #svm_clf = LinearSVC(C=0.1, dual=False)  # solvinf primal prbl is good when n_samples > n_features
 svm_clf = SVC(
     kernel="rbf", #gaussian kernel
-    C=1, #penalty for misclassification
+    C=10, #penalty for misclassification
     gamma="scale",
 )
-svm_clf.fit(x_train, y_train)
+#svm_clf.fit(x_train, y_train) without class weighting
+sample_weight_train = np.array([class_weights[y_i] for y_i in y_train])
+svm_clf.fit(x_train, y_train, sample_weight=sample_weight_train)
 
 # Test
 y_pred = svm_clf.predict(x_test)
