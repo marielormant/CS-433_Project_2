@@ -1,5 +1,6 @@
 """
-Load and evaluate the best model from interrupted Keras Tuner optimization
+Load best trial from Keras Tuner and train final model.
+Loads saved hyperparameters and retrains on full training data.
 """
 
 import pickle
@@ -13,37 +14,29 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report, con
 from sklearn.utils import class_weight
 import keras_tuner as kt
 
-print("="*60)
-print(" Loading Best Model from Keras Tuner")
-print("="*60)
-
-# -------------------------------------------------------
-# 1. Load and preprocess data (same as training)
-# -------------------------------------------------------
-print("\n[1/5] Loading dataset...")
+# 1) Load and preprocess data (same as training)
 with open("dataset/dataset.pkl", "rb") as f:
     dataset = pickle.load(f)
 
 data = pd.json_normalize(dataset)
 
+# Features: 6 epsilons only (no FI in inputs)
 eps_df = pd.DataFrame(
     data["eps_global"].tolist(),
     columns=[f"eps{i}" for i in range(1, 7)]
 )
+x = eps_df.values
 
+# Labels: derive class from FI >= 1; take max FI index when multiple failures
 plies_cols = [
     'plies.0.0.FI_ft', 'plies.0.0.FI_fc', 'plies.0.0.FI_mt', 'plies.0.0.FI_mc',
     'plies.45.0.FI_ft', 'plies.45.0.FI_fc', 'plies.45.0.FI_mt', 'plies.45.0.FI_mc',
     'plies.90.0.FI_ft', 'plies.90.0.FI_fc', 'plies.90.0.FI_mt', 'plies.90.0.FI_mc',
     'plies.-45.0.FI_ft', 'plies.-45.0.FI_fc', 'plies.-45.0.FI_mt', 'plies.-45.0.FI_mc',
 ]
-plies_df = data[plies_cols]
 
-data_df = pd.concat([eps_df, plies_df], axis=1)
-x = data_df.values
-
-# Build labels
-F = data_df[plies_cols].values
+# Build labels from FI (not used as features!)
+F = data[plies_cols].values
 mask_failure = (F >= 1)
 has_failure = mask_failure.any(axis=1)
 
@@ -53,8 +46,7 @@ y = np.zeros(len(F), dtype=int)
 max_FI = F_valid[has_failure].argmax(axis=1) + 1
 y[has_failure] = max_FI
 
-# Split data
-print("\n[2/5] Splitting and scaling data...")
+# Split data: 80/20 train/test, then 80/20 train/val on train
 x_train, x_test, y_train, y_test = train_test_split(
     x, y, test_size=0.2, random_state=42, stratify=y
 )
@@ -68,7 +60,7 @@ x_train = scaler.fit_transform(x_train)
 x_val = scaler.transform(x_val)
 x_test = scaler.transform(x_test)
 
-# Class weights
+# Class weights for imbalance
 class_weights_array = class_weight.compute_class_weight(
     class_weight='balanced',
     classes=np.unique(y_train),
@@ -78,17 +70,14 @@ class_weights_dict = dict(enumerate(class_weights_array))
 
 print(f"Test samples: {len(x_test):,}")
 
-# -------------------------------------------------------
-# 2. Load the tuner and get best model
-# -------------------------------------------------------
-print("\n[3/5] Loading Keras Tuner results...")
+# 2) Load the tuner and get best trial
 
 # Recreate the tuner (it will load saved state)
 from tensorflow.keras import layers, regularizers
 
 def build_model(hp):
     model = keras.Sequential()
-    model.add(layers.Input(shape=(22,)))
+    model.add(layers.Input(shape=(6,)))  # 6 epsilon features only!
     
     num_layers = hp.Int('num_layers', min_value=2, max_value=4, step=1)
     
@@ -136,26 +125,33 @@ tuner = kt.Hyperband(
 
 print(f"Tuner loaded with {len(tuner.oracle.trials)} completed trials")
 
-# Get best hyperparameters
+# Get best trial and hyperparameters
+best_trials = tuner.oracle.get_best_trials(num_trials=1)
+best_trial = best_trials[0]
 best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
 
 print("\n" + "="*60)
-print("BEST HYPERPARAMETERS FROM {} TRIALS:".format(len(tuner.oracle.trials)))
+print("BEST TRIAL SELECTED:")
 print("="*60)
-print(f"Number of layers: {best_hps.get('num_layers')}")
-for i in range(best_hps.get('num_layers')):
-    print(f"  Layer {i+1} units: {best_hps.get(f'units_layer_{i}')}")
-    print(f"  Layer {i+1} dropout: {best_hps.get(f'dropout_layer_{i}')}")
-print(f"Batch normalization: {best_hps.get('batch_norm')}")
-print(f"L2 regularization: {best_hps.get('l2_reg')}")
-print(f"Learning rate: {best_hps.get('learning_rate')}")
-print("="*60)
+print(f"Trial ID: {best_trial.trial_id}")
+print(f"Trial Number: {list(tuner.oracle.trials.values()).index(best_trial) + 1} out of {len(tuner.oracle.trials)}")
+print(f"Validation Loss: {best_trial.score:.6f} (lowest among all trials)")
+print(f"Selection criteria: Minimum validation loss")
+print(f"\nTrial location: nn_tuner_results/fn_minimization/{best_trial.trial_id}/")
 
-# -------------------------------------------------------
-# 3. Train final model with best hyperparameters
-# -------------------------------------------------------
-print("\n[4/5] Training final model with best hyperparameters...")
-print("(Training on full train+val set for best performance)")
+print("\n" + "="*60)
+print("3) Best trial hyperparameters:")
+print(f"  Trial ID: {best_trial.trial_id}")
+print(f"  Validation loss: {best_trial.score:.6f}")
+print(f"  Number of layers: {best_hps.get('num_layers')}")
+for i in range(best_hps.get('num_layers')):
+    print(f"    Layer {i+1} units: {best_hps.get(f'units_layer_{i}')}")
+    print(f"    Layer {i+1} dropout: {best_hps.get(f'dropout_layer_{i}')}")
+print(f"  Batch normalization: {best_hps.get('batch_norm')}")
+print(f"  L2 regularization: {best_hps.get('l2_reg')}")
+print(f"  Learning rate: {best_hps.get('learning_rate')}")
+
+# 3) Train final model with best hyperparameters
 
 # Combine train and val for final training
 x_train_full = np.vstack([x_train, x_val])
@@ -187,13 +183,7 @@ history = best_model.fit(
     verbose=1
 )
 
-# -------------------------------------------------------
-# 4. Evaluate on test set
-# -------------------------------------------------------
-print("\n[5/5] Evaluating on test set...")
-print("="*60)
-print("TEST SET EVALUATION")
-print("="*60)
+# 4) Evaluate on test set
 
 y_test_pred = best_model.predict(x_test, batch_size=1024, verbose=0)
 y_test_pred_classes = np.argmax(y_test_pred, axis=1)
@@ -203,20 +193,19 @@ accuracy = accuracy_score(y_test, y_test_pred_classes)
 f1_macro = f1_score(y_test, y_test_pred_classes, average='macro')
 f1_weighted = f1_score(y_test, y_test_pred_classes, average='weighted')
 
-print(f"\nOVERALL PERFORMANCE:")
+print("\nTest Results:")
 print(f"  Accuracy:            {accuracy*100:.2f}%")
 print(f"  F1 Score (macro):    {f1_macro*100:.2f}%")
 print(f"  F1 Score (weighted): {f1_weighted*100:.2f}%")
 
 # False negative analysis
-print(f"\nFALSE NEGATIVE ANALYSIS:")
 is_actual_failure = (y_test > 0)
 is_predicted_safe = (y_test_pred_classes == 0)
 false_negatives = np.sum(is_actual_failure & is_predicted_safe)
 total_failures = np.sum(is_actual_failure)
 fn_rate = (false_negatives / total_failures * 100) if total_failures > 0 else 0
 
-print(f"  False Negatives:     {false_negatives:,} / {total_failures:,} ({fn_rate:.2f}%)")
+print(f"\nFalse Negatives:     {false_negatives:,} / {total_failures:,} ({fn_rate:.2f}%)")
 
 # False positive analysis
 is_actual_safe = (y_test == 0)
@@ -225,50 +214,20 @@ false_positives = np.sum(is_actual_safe & is_predicted_failure)
 total_safe = np.sum(is_actual_safe)
 fp_rate = (false_positives / total_safe * 100) if total_safe > 0 else 0
 
-print(f"\nFALSE POSITIVE ANALYSIS:")
-print(f"  False Positives:     {false_positives:,} / {total_safe:,} ({fp_rate:.2f}%)")
-
-# Goal check
-print("\n" + "="*60)
-print("GOAL CHECK:")
-print("="*60)
-accuracy_goal = accuracy >= 0.90
-f1_goal = f1_macro >= 0.90
-fn_minimized = fn_rate < 5.0
-
-print(f" Accuracy ≥ 90%:     {'YES ' if accuracy_goal else 'NO '} ({accuracy*100:.2f}%)")
-print(f" F1 Score ≥ 90%:     {'YES ' if f1_goal else 'NO '} ({f1_macro*100:.2f}%)")
-print(f" FN Rate < 5%:       {'YES ' if fn_minimized else 'NO '} ({fn_rate:.2f}%)")
-
-if accuracy_goal and f1_goal and fn_minimized:
-    print("\n ALL GOALS MET! ")
-else:
-    print("\n  Some goals not met.")
+print(f"False Positives:     {false_positives:,} / {total_safe:,} ({fp_rate:.2f}%)")
 
 # Per-class performance
-print("\n" + "="*60)
-print("PER-CLASS PERFORMANCE:")
-print("="*60)
+print("\nPer-class performance:")
 print(classification_report(y_test, y_test_pred_classes, zero_division=0, digits=3))
 
 # Confusion matrix
-print("\nCONFUSION MATRIX (first 6x6):")
+print("\nConfusion matrix (first 6x6):")
 cm = confusion_matrix(y_test, y_test_pred_classes)
 print(cm[:6, :6])
 
-# -------------------------------------------------------
-# 5. Save final model
-# -------------------------------------------------------
-print("\nSaving final model and scaler...")
+# 6) Save final model and scaler
 best_model.save('best_nn_model_tuned.h5')
-
 with open('nn_scaler_tuned.pkl', 'wb') as f:
     pickle.dump(scaler, f)
 
-print("Saved:")
-print("  - best_nn_model_tuned.h5")
-print("  - nn_scaler_tuned.pkl")
-
-print("\n" + "="*60)
-print(" EVALUATION COMPLETE!")
-print("="*60)
+print("\nSaved artifacts:")
