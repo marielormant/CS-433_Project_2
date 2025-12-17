@@ -14,9 +14,9 @@ from torch.utils.data import DataLoader
 from classes import MLP, CustomTorchDataset as npdata   # PyTorch MLP + Dataset
 
 
-# ---------------------------------------------------------
+
 # 1. Load and preprocess data
-# ---------------------------------------------------------
+
 
 with open("dataset/dataset.pkl", "rb") as f:
     dataset = pickle.load(f)
@@ -182,7 +182,7 @@ def eval_f1_macro(model, loader):
 
 
 
-# 6. Optuna objective with 5-fold Stratified CV (PyTorch MLP)
+# 6. Optuna objective with 5-fold Stratified CV 
 
 
 def make_objective_cv5(x_all, y_all, class_weights_dict, input_dim, num_classes, seed=0):

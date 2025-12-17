@@ -21,7 +21,7 @@ from classes import CustomTorchDataset, MLP
 with open("dataset/dataset.pkl", "rb") as f:
     dataset = pickle.load(f)
 
-# Flatten nested dicts into flat columns like "plies.0.0.FI_ft"
+# Flatten dicts into flat columns like "plies.0.0.FI_ft"
 data = pd.json_normalize(dataset)
 
 print("Data shape:", data.shape)
