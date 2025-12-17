@@ -82,7 +82,8 @@ model.fit(X_train, y_train)
 # 4) Evaluate on test set
 y_pred = model.predict(X_test)
 acc = accuracy_score(y_test, y_pred)
-f1 = f1_score(y_test, y_pred, average='macro', zero_division=0)
+f1_macro = f1_score(y_test, y_pred, average='macro', zero_division=0)
+f1_weighted = f1_score(y_test, y_pred, average='weighted', zero_division=0)
 
 # False negatives analysis (missed failures)
 is_actual_failure = (y_test > 0)
@@ -92,7 +93,8 @@ total_failures = np.sum(is_actual_failure)
 fn_rate = false_negatives / total_failures if total_failures > 0 else 0
 
 print(f"Accuracy: {acc:.4f}")
-print(f"F1 Score (macro): {f1:.4f}")
+print(f"F1 Score (macro): {f1_macro:.4f}")
+print(f"F1 Score (weighted): {f1_weighted:.4f}")
 print(f"False Negatives: {false_negatives} / {total_failures}")
 print(f"FN Rate: {fn_rate:.4f}")
 print("\nClassification report:")

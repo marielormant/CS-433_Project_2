@@ -76,12 +76,12 @@ class_weights_dict = dict(enumerate(class_weights_array))
 
 # 2) Baseline architecture (typical starting values)
 baseline_architecture = {
-    'num_layers': 2,
-    'units_per_layer': 256,
-    'dropout': 0.3,
+    'num_layers': 3,
+    'units_per_layer': 128,
+    'dropout': 0.2,
     'learning_rate': 0.001,
-    'batch_size': 256,
-    'epochs': 100
+    'batch_size': 128,
+    'epochs': 50
 }
 
 print("\nBaseline hyperparameters:")
@@ -93,19 +93,23 @@ model = keras.Sequential([
     layers.InputLayer(input_shape=(6,)),
     
     # Hidden layer 1
-    layers.Dense(256, activation='relu'),
-    layers.Dropout(0.3),
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.2),
     
     # Hidden layer 2
-    layers.Dense(256, activation='relu'),
-    layers.Dropout(0.3),
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.2),
+    
+    # Hidden layer 3
+    layers.Dense(128, activation='relu'),
+    layers.Dropout(0.2),
     
     # Output layer
     layers.Dense(17, activation='softmax')
 ])
 
 model.compile(
-    optimizer=keras.optimizers.Adam(learning_rate=0.001),
+    optimizer=keras.optimizers.Adam(learning_rate=0.01),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
