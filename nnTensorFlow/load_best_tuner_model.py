@@ -70,81 +70,20 @@ class_weights_dict = dict(enumerate(class_weights_array))
 
 print(f"Test samples: {len(x_test):,}")
 
-# 2) Load the tuner and get best trial
-
-# Recreate the tuner (it will load saved state)
+# 2) Load best trial hyperparameters from local trial_0071
+import json
 from tensorflow.keras import layers, regularizers
 
-def build_model(hp):
-    model = keras.Sequential()
-    model.add(layers.Input(shape=(6,)))  # 6 epsilon features only!
-    
-    num_layers = hp.Int('num_layers', min_value=2, max_value=4, step=1)
-    
-    for i in range(num_layers):
-        if i == 0:
-            units = hp.Int(f'units_layer_{i}', min_value=128, max_value=512, step=64)
-        else:
-            units = hp.Int(f'units_layer_{i}', min_value=32, max_value=256, step=32)
-        
-        l2_reg = hp.Float('l2_reg', min_value=0, max_value=0.01, step=0.001)
-        
-        model.add(layers.Dense(units, kernel_regularizer=regularizers.l2(l2_reg)))
-        
-        if hp.Boolean('batch_norm'):
-            model.add(layers.BatchNormalization())
-        
-        model.add(layers.Activation('relu'))
-        
-        dropout = hp.Float(f'dropout_layer_{i}', min_value=0.1, max_value=0.5, step=0.1)
-        model.add(layers.Dropout(dropout))
-    
-    model.add(layers.Dense(17, activation='softmax'))
-    
-    learning_rate = hp.Float('learning_rate', min_value=1e-4, max_value=1e-2, sampling='log')
-    
-    optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
-    model.compile(
-        optimizer=optimizer,
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    
-    return model
+print("\n3) Loading best trial from trial_0071...")
 
-tuner = kt.Hyperband(
-    build_model,
-    objective='val_loss',
-    max_epochs=50,
-    factor=3,
-    hyperband_iterations=2,
-    directory='nn_tuner_results',
-    project_name='fn_minimization',
-    overwrite=False  # Don't overwrite, load existing
-)
+# Load hyperparameters from build_config.json
+with open("nnTensorFlow/trial_0071/build_config.json", "r") as f:
+    config = json.load(f)
 
-print(f"Tuner loaded with {len(tuner.oracle.trials)} completed trials")
+best_hps = config.get("config", {})
 
-# Get best trial and hyperparameters
-best_trials = tuner.oracle.get_best_trials(num_trials=1)
-best_trial = best_trials[0]
-best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
-
-print("\n" + "="*60)
-print("BEST TRIAL SELECTED:")
-print("="*60)
-print(f"Trial ID: {best_trial.trial_id}")
-print(f"Trial Number: {list(tuner.oracle.trials.values()).index(best_trial) + 1} out of {len(tuner.oracle.trials)}")
-print(f"Validation Loss: {best_trial.score:.6f} (lowest among all trials)")
-print(f"Selection criteria: Minimum validation loss")
-print(f"\nTrial location: nn_tuner_results/fn_minimization/{best_trial.trial_id}/")
-
-print("\n" + "="*60)
-print("3) Best trial hyperparameters:")
-print(f"  Trial ID: {best_trial.trial_id}")
-print(f"  Validation loss: {best_trial.score:.6f}")
 print(f"  Number of layers: {best_hps.get('num_layers')}")
-for i in range(best_hps.get('num_layers')):
+for i in range(best_hps.get('num_layers', 0)):
     print(f"    Layer {i+1} units: {best_hps.get(f'units_layer_{i}')}")
     print(f"    Layer {i+1} dropout: {best_hps.get(f'dropout_layer_{i}')}")
 print(f"  Batch normalization: {best_hps.get('batch_norm')}")
@@ -165,10 +104,37 @@ class_weights_array_full = class_weight.compute_class_weight(
 )
 class_weights_dict_full = dict(enumerate(class_weights_array_full))
 
-# Build and train final model
-best_model = tuner.hypermodel.build(best_hps)
+# Build model with best hyperparameters
+best_model = keras.Sequential()
+best_model.add(layers.Input(shape=(6,)))
+
+num_layers = best_hps.get('num_layers', 2)
+for i in range(num_layers):
+    units = best_hps.get(f'units_layer_{i}', 256)
+    l2_reg = best_hps.get('l2_reg', 0.001)
+    
+    best_model.add(layers.Dense(units, kernel_regularizer=regularizers.l2(l2_reg)))
+    
+    if best_hps.get('batch_norm', False):
+        best_model.add(layers.BatchNormalization())
+    
+    best_model.add(layers.Activation('relu'))
+    
+    dropout = best_hps.get(f'dropout_layer_{i}', 0.3)
+    best_model.add(layers.Dropout(dropout))
+
+best_model.add(layers.Dense(17, activation='softmax'))
+
+learning_rate = best_hps.get('learning_rate', 0.001)
+optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+best_model.compile(
+    optimizer=optimizer,
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
 
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+
 
 history = best_model.fit(
     x_train_full, y_train_full,
@@ -183,7 +149,7 @@ history = best_model.fit(
     verbose=1
 )
 
-# 4) Evaluate on test set
+# 5) Evaluate on test set
 
 y_test_pred = best_model.predict(x_test, batch_size=1024, verbose=0)
 y_test_pred_classes = np.argmax(y_test_pred, axis=1)
@@ -231,3 +197,6 @@ with open('nn_scaler_tuned.pkl', 'wb') as f:
     pickle.dump(scaler, f)
 
 print("\nSaved artifacts:")
+print("  - best_nn_model_tuned.h5")
+print("  - nn_scaler_tuned.pkl")
+
