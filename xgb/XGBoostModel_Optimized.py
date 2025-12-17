@@ -63,7 +63,7 @@ print(f"Test samples: {len(x_test):,}")
 
 # 2) Load best hyperparameters from optimization
 try:
-    with open('optuna_xgboost_study.pkl', 'rb') as f:
+    with open('xgb/optuna_xgboost_study.pkl', 'rb') as f:
         study = pickle.load(f)
     
     best_trial = study.best_trial
