@@ -101,7 +101,7 @@ False negatives are explicitly monitored, as misclassifying a failing laminate a
 
 ---
 
-## ⚠️ Ethical Considerations
+## Ethical Considerations
 
 A dedicated ethical risk analysis is conducted to address **false negatives**, defined as unsafe samples incorrectly classified as safe.  
 For the Random Forest model, an adjustable decision threshold is introduced to trade overall performance for **maximum safety recall**, demonstrating that catastrophic errors can be eliminated at the cost of increased false positives.
