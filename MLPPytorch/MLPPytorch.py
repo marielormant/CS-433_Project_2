@@ -54,12 +54,10 @@ plies_cols = [
     "plies.-45.0.FI_ft", "plies.-45.0.FI_fc", "plies.-45.0.FI_mt", "plies.-45.0.FI_mc",
 ]
 
-missing = [c for c in plies_cols if c not in data.columns]
-if missing:
-    raise KeyError(
-        f"Missing {len(missing)} plies columns (example: {missing[:5]}). "
-        f"Available 'plies' columns example: {[c for c in data.columns if 'plies' in c][:10]}"
-    )
+#To control if plies_cols is well written :
+#missing = [c for c in plies_cols if c not in data.columns]
+#if missing:
+#    raise KeyError(f"Missing {len(missing)} plies columns ")
 
 F = data[plies_cols].to_numpy(dtype=np.float32)  # (N, 16)
 
@@ -87,12 +85,16 @@ x_test = scaler.transform(x_test).astype(np.float32)
 
 # 5) Torch datasets and loaders
 
+batch_size = 64
+
+# Create PyTorch datasets from training and test data using the custom dataset class
 train_dataset = CustomTorchDataset(x_train, y_train)
 test_dataset = CustomTorchDataset(x_test, y_test)
 
+# DataLoader wraps the datasets to enable mini-batch loading and shuffling
 batch_size = 64
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)  # Shuffles training data each epoch
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)   # No shuffle for test data
 
 
 
@@ -122,8 +124,8 @@ Ntr = len(y_train)
 counts_safe = counts.copy()
 counts_safe[counts_safe == 0] = 1.0
 
-class_weights_np = Ntr / (num_classes * counts_safe)
-class_weights_np = class_weights_np / class_weights_np.mean()
+class_weights_np = Ntr / (num_classes * counts_safe) 
+class_weights_np = class_weights_np / class_weights_np.mean() #normalize 
 
 # If a class truly absent, setting weight=0 makes its loss irrelevant
 class_weights_np[counts == 0] = 0.0
