@@ -75,32 +75,6 @@ False negatives are explicitly monitored, as misclassifying a failing laminate a
 
 ---
 
-## Hyperparameter Optimization
-
-### XGBoost
-- Hyperparameters are optimized using **Optuna** with a **Tree-structured Parzen Estimator (TPE)** sampler
-- Optimization objective: **maximize macro-averaged F1 score**
-- Tuned parameters include:
-  - Tree depth
-  - Learning rate
-  - Number of estimators
-  - Subsampling ratios
-  - Column sampling strategies
-  - Regularization terms (L1, L2)
-  - Minimum child weight
-  - Minimum loss reduction (`gamma`)
-
-### Neural Networks
-- Tuned parameters include:
-  - Number of hidden layers
-  - Number of units per layer
-  - Learning rate
-  - Dropout rates
-  - Batch size
-  - Weight decay / regularization
-
----
-
 ## Ethical Considerations
 
 A dedicated ethical risk analysis is conducted to address **false negatives**, defined as unsafe samples incorrectly classified as safe.  
@@ -132,7 +106,7 @@ Detailed results and per-class metrics are available in the report appendix.
     - load_best_tuner_model.py - neural networks (tensorflow) that trains and tests with the optimized hyperparameters
     - trial_0071 - trial with the smallest validation loss with the optimized hyperparameters
  - MLPPytorch folder:
-     - classes.py -
+     - classes.py - defines a PyTorch dataset to feed features and labels into a DataLoader and implements a two-hidden-layer MLP classifier
      - MLPPytorch.py - NN (PyTorch) that trains and tests with the optimized hyperparameters
      - MLPPytorchOpti.py - optimization code for the Neural Networks (PyTorch) model
   - SVM folder:
