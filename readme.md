@@ -128,10 +128,22 @@ Detailed results and per-class metrics are available in the report appendix.
     - 
 - nnTensorFlow folder:
     - nnTensorFlowBaselineModel.py - baseline Neural Networks (TensorFlow) model
-    - neural_network_optimization.py - optimization code for the Neural Networsk (TensorFlow) model
+    - neural_network_optimization.py - optimization code for the Neural Networks (TensorFlow) model
     - load_best_tuner_model.py - neural networks (tensorflow) that trains and tests with the optimized hyperparameters
     - trial_0071 - trial with the smallest validation loss with the optimized hyperparameters
-
+ - MLPPytorch folder:
+     - classes.py -
+     - MLPPytorch.py - NN (PyTorch) that trains and tests with the optimized hyperparameters
+     - MLPPytorchOpti.py - optimization code for the Neural Networks (PyTorch) model
+  - SVM folder:
+      - SVM.py - SVM model that trains and tests with the optimized hyperparameters
+      - SVMOpti.py - optimization code for the SVM model
+   - rd folder:
+       - OptunaOptimization.py - RandomForest optimization code
+       - RF_Baseline.py - RandomForest baseline model
+       - RF_FinalParameters.py - weighted RF model that trains and tests with the optimized hyperparameters
+       - RF_Weighted.py - weighted baseline RD model
+       - Threshold_Sweep.py - Ethical Risks compliant RF model
 ---
 
 ## Report
