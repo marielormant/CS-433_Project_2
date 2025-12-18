@@ -7,7 +7,7 @@
 EPFL — CS-433 Machine Learning
 
 # CS-433 — Project II  
-## Multiclass Failure Prediction of Carbon Fibre Composites using Machine Learning
+## Multiclass Failure Prediction of Carbon Fibre Composites using Machine Learning (Task 4)
 
 This repository contains the code developed for **CS-433 – Machine Learning Project II**, focusing on the prediction of failure modes in carbon-fiber composite laminates using supervised machine learning models.
 
@@ -99,7 +99,6 @@ Detailed results and per-class metrics are available in the report appendix.
     - xgboost_optuna.py - optimization code for the xbgoost model
     - optuna_xgboost_study.pkl - optimized hyperparameters
     - XGBoostModel_Optimized.py - xgboost model that trains and tests with the optimized hyperparameters
-    - 
 - nnTensorFlow folder:
     - nnTensorFlowBaselineModel.py - baseline Neural Networks (TensorFlow) model
     - neural_network_optimization.py - optimization code for the Neural Networks (TensorFlow) model
@@ -118,6 +117,9 @@ Detailed results and per-class metrics are available in the report appendix.
        - RF_FinalParameters.py - weighted RF model that trains and tests with the optimized hyperparameters
        - RF_Weighted.py - weighted baseline RD model
        - Threshold_Sweep.py - Ethical Risks compliant RF model
+
+  - readme.md - Readme file
+  - CS_433_ML_tasks.pdf; CS_433_pres_handout.pdf; Subject_proposal_CS433.pdf
 ---
 
 ## Report
